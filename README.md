@@ -125,3 +125,84 @@ The `my_starlette.staticfiles` is my modyfication of [Starlette](https://www.sta
 CSS and JavaScrip files have haaders with proper `Content-type`. Just grab it from my repo.
 
 If `unicorn` still running at <http://127.0.0.1:8000/> you see Angular default page.
+
+### Dockerize it all
+
+Create `requirements.txt` file for python:
+
+```bash
+cd backend
+pip freeze > requirements.txt
+cd ..
+```
+
+Create `Dockerfile`.
+
+```Dockerfile
+FROM python:3.11.7-slim
+EXPOSE 8000
+# Keeps Python from generating .pyc files in the container
+ENV PYTHONDONTWRITEBYTECODE=1
+# Turns off buffering for easier container logging
+ENV PYTHONUNBUFFERED=1
+RUN python -m pip install --upgrade pip
+# Install pip requirements
+COPY backend/requirements.txt .
+RUN python -m pip install -r requirements.txt
+
+WORKDIR /app
+COPY ./backend/ /app
+
+# Creates a non-root user with an explicit UID and adds permission to access the /app folder
+# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
+RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
+USER appuser
+# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "-k", "uvicorn.workers.UvicornWorker", "main:app"]
+```
+
+And standard `.dockerignore` file.
+
+```text
+**/__pycache__
+**/.venv
+**/.classpath
+**/.dockerignore
+**/.env
+**/.git
+**/.gitignore
+**/.project
+**/.settings
+**/.toolstarget
+**/.vs
+**/.vscode
+**/*.*proj.user
+**/*.dbmdl
+**/*.jfm
+**/bin
+**/charts
+**/docker-compose*
+**/compose*
+**/Dockerfile*
+**/node_modules
+**/npm-debug.log
+**/obj
+**/secrets.dev.yaml
+**/values.dev.yaml
+LICENSE
+README.md
+```
+
+Build docker image.
+
+```bash
+docker build -t leliw/ap-basic .
+```
+
+Then run built image.
+
+```bash
+docker run -p 8088:8000 leliw/ap-basic
+```
+
+Go <http://localhost:8088/>.
