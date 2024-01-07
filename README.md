@@ -206,3 +206,81 @@ docker run -p 8088:8000 leliw/ap-basic
 ```
 
 Go <http://localhost:8088/>.
+
+## Run in development environment
+
+Create a file `frontend/src/proxy.conf.json`.
+Mind that `localhost` and `127.0.0.1` is not the same
+in Node v. 17 (see: <https://angular.io/guide/build>).
+
+```json
+{
+    "/api": {
+        "target": "http://127.0.0.1:8000",
+        "secure": false,
+        "changeOrigin": true,
+        "logLevel": "debug"
+    }
+}
+```
+
+Run backend in one terminal,
+
+```bash
+cd backend
+uvicorn main:app --reload
+```
+
+and frontend in another terminal.
+
+```bash
+cd frontend
+ng serve --proxy-config=src/proxy.conf.json
+```
+
+Modify main component to get data from backend and
+see the effect - change `app.component.ts`,
+
+```typescript
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterOutlet } from '@angular/router';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
+
+export interface Hello {
+    Hello: string;
+}
+@Component({
+    selector: 'app-root',
+    standalone: true,
+    imports: [CommonModule, RouterOutlet, HttpClientModule],
+    templateUrl: './app.component.html',
+    styleUrl: './app.component.css'
+})
+
+export class AppComponent {
+
+    title = 'frontend';
+    hello = '';
+
+    constructor(private http: HttpClient) {
+        this.http.get<Hello>('/api').subscribe(data => {
+            this.hello = data.Hello;
+        });
+    }
+
+}
+```
+
+ and `app.component.html`.
+
+```html
+<h1>Hello, {{hello}} - {{ title }}</h1>
+<p>Congratulations! Your app is running. 🎉</p>
+<router-outlet></router-outlet>
+```
+
+You can also modify `angular.json` and add
+`"proxyConfig": "src/proxy.conf.json"` in
+`projects->frontend->architect->serve->development`
+instead of `--proxy-config=src/proxy.conf.json` parameter.
