@@ -284,3 +284,43 @@ You can also modify `angular.json` and add
 `"proxyConfig": "src/proxy.conf.json"` in
 `projects->frontend->architect->serve->development`
 instead of `--proxy-config=src/proxy.conf.json` parameter.
+
+## Config data
+
+Usually config is set by system variables on backend server
+and default values are stored in special `config.yaml` file.
+Sometimes some config variables has to be used in frontend.
+
+### Backend config
+
+Install `pyaml-env` library
+
+```bash
+pip install pyaml-env
+```
+
+add reading config and endpoint returning this config.
+
+```python
+from pyaml_env import parse_config
+
+app = FastAPI()
+config = parse_config('./config.yaml')
+
+@app.get("/api/config")
+async def read_config():
+    return config
+```
+
+Now you have to define default config in `config.yaml` file.
+Something like this.
+
+```yaml
+title: Marcin
+version: 1.0.0
+organization:
+  name: "My Organization"
+  address: "123 Main St"
+```
+
+<https://dev.to/mkaranasou/python-yaml-configuration-with-environment-variables-parsing-2ha6>
