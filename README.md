@@ -324,3 +324,76 @@ organization:
 ```
 
 <https://dev.to/mkaranasou/python-yaml-configuration-with-environment-variables-parsing-2ha6>
+
+### Frontend config
+
+Generate config service
+
+```bash
+ng generate service config/config
+```
+
+and update it like this
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable, map, of } from 'rxjs';
+
+export interface Config {
+    title: string;
+    version: string;
+}
+
+@Injectable({
+  providedIn: 'root',
+})
+export class ConfigService {
+
+    private url = "/api/config"
+    private static config: Config | undefined = undefined;
+
+    constructor(private http: HttpClient) { }
+    
+    public getConfig(): Observable<Config> {
+        if (!ConfigService.config)
+            return this.http.get<Config>(this.url)
+                .pipe(map(c => {
+                    if (!c.version)
+                        c.version = "0.0.1";
+                    ConfigService.config = c;
+                    return c;
+                }));
+        else
+            return of(ConfigService.config);
+    }
+
+}
+```
+
+You have also provide `HttpClient` - modify `app.config.ts`.
+
+```TypeScript
+import {provideHttpClient} from '@angular/common/http';
+
+export const appConfig: ApplicationConfig = {
+  providers: [provideRouter(routes), provideAnimations(), provideHttpClient()]
+};
+```
+
+And now you can use config in components.
+
+```TypeScript
+export class AppComponent {
+
+    title = 'frontend';
+    version = '';
+
+    constructor(private config: ConfigService) {
+        this.config.getConfig().subscribe(c => {
+            this.title = c.title;
+            this.version = c.version;
+        })
+    }
+}
+```
