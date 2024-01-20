@@ -28,4 +28,4 @@ jobs:
       - name: Build frontend
         run: |
           cd frontend
-          run build:prod
+          npm run build:prod
