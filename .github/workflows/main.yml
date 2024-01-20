@@ -11,8 +11,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  my_job:
-    name: deploy to staging
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,3 +29,5 @@ jobs:
         run: |
           cd frontend
           npm run build
+      - name: Build the Docker image
+        run: docker build . --file Dockerfile --tag ap-basic:$(date +%s)
