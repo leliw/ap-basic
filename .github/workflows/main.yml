@@ -49,4 +49,4 @@ jobs:
         with:
           push: true
           context: .
-          tags:  ghcr.io/leliw/ap-basic:latest
+          tags:  ghcr.io/${{ github.repository }}:latest
