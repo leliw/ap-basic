@@ -392,6 +392,9 @@ organization:
   address: "123 Main St"
 ```
 
+If the `$TITLE` environment variable is set then its value is returned in the config.
+If it is not set then the default value is returned specified after a colon.
+
 <https://dev.to/mkaranasou/python-yaml-configuration-with-environment-variables-parsing-2ha6>
 
 ### Frontend config
