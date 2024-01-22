@@ -207,6 +207,75 @@ docker run -p 8088:8000 leliw/ap-basic
 
 Go <http://localhost:8088/>.
 
+### Build docker image with Github Action
+
+Create `.github\workflows\main.yaml` with content:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - release/*
+  pull_request:
+    branches:
+      - main
+  
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.19'
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm install
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          context: .
+          tags:  ghcr.io/${{ github.repository }}:latest
+```
+
+It's run someone push changes into `main` or `release/*` branch or
+make pull request. It:
+
+- checkout source from git
+- setup node version
+- install dependencies (in frontend directory)
+- build Angular part (in frontend directory)
+- build docker image (where pip modules are istalled)
+- push this image into GitHub Packages (ghcr.io)
+
+Now you can pull and run this image:
+
+```bash
+docker pull ghcr.io/leliw/ap-basic:latest
+docker run -p 8000:8000 ghcr.io/leliw/ap-basic:latest
+```
+
 ## Run in development environment
 
 Create a file `frontend/src/proxy.conf.json`.
