@@ -48,7 +48,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: leliw/ap-basic
+          images:  ghcr.io/leliw/ap-basic
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
