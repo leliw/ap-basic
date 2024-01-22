@@ -1,4 +1,4 @@
-title: Marcin
+title: !ENV ${TITLE:Marcin}
 version: 1.0.0
 organization:
   name: "My Organization"

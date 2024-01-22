@@ -385,7 +385,7 @@ Now you have to define default config in `config.yaml` file.
 Something like this.
 
 ```yaml
-title: Marcin
+title: !ENV ${TITLE:Marcin}
 version: 1.0.0
 organization:
   name: "My Organization"
