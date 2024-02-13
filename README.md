@@ -115,14 +115,50 @@ Compiled files will be written in `backend/static/browser`.
 Set python to serve these files - modify `main.py`.
 
 ```python
-from my_starlette.staticfiles import StaticFiles
+from static_files import static_file_response
 
 # Angular static files - it have to be at the end of file
-app.mount("/", StaticFiles(directory="static/browser", html = True), name="static")
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def catch_all(_: Request, full_path: str):
+    return static_file_response("static/browser", full_path)
 ```
 
-The `my_starlette.staticfiles` is my modyfication of [Starlette](https://www.starlette.io/) where
-CSS and JavaScrip files have haaders with proper `Content-type`. Just grab it from my repo.
+Add `static_files.py` where Angular startic files are served.
+It adds proper `Content-Type` header and returns main `index.html`
+if URL path does'n exists.
+
+```python
+import os
+from pathlib import Path
+
+from fastapi import HTTPException
+from fastapi.responses import HTMLResponse
+
+
+def static_file_response(base_dir: str, uri_path: str) -> HTMLResponse:
+    """Return a static files (if exists) or index.html (if exists) from the base_dir"""
+    file_path = Path(base_dir) / uri_path
+    if file_path.exists() and file_path.is_file():
+        return HTMLResponse(content=file_path.read_text(), status_code=200, headers=get_file_headers(file_path))
+    index_path = Path(base_dir) / 'index.html'
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Page not found")
+    return HTMLResponse(content=index_path.read_text(), status_code=200)
+
+def get_file_headers(file_path: Path) -> dict[str, str]:
+    """Return the file headers (Content-Type) based on the file extension"""
+    file_extension = os.path.splitext(file_path)[1]
+    match file_extension:
+        case ".js":
+            media_type = "text/javascript"
+        case ".css":
+            media_type = "text/css"
+        case ".ico":
+            media_type = "image/x-icon"
+        case _:
+            media_type = "text/html"
+    return {"Content-Type": media_type}
+```
 
 If `unicorn` still running at <http://127.0.0.1:8000/> you see Angular default page.
 

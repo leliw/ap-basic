@@ -1,9 +1,10 @@
 """Main file for FastAPI server"""
 from typing import Union
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from pyaml_env import parse_config
 
-from my_starlette.staticfiles import StaticFiles
+from static_files import static_file_response
 
 app = FastAPI()
 config = parse_config('./config.yaml')
@@ -24,4 +25,7 @@ async def read_item(item_id: int, q: Union[str, None] = None):
     return {"item_id": item_id, "q": q}
 
 # Angular static files - it have to be at the end of file
-app.mount("/", StaticFiles(directory="static/browser", html = True), name="static")
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def catch_all(_: Request, full_path: str):
+    """Catch all for Angular routing"""
+    return static_file_response("static/browser", full_path)
