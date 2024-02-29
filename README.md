@@ -81,7 +81,7 @@ Now you can go to <http://127.0.0.1:8000/api> to see results
 You will see automatic documentation here: <http://127.0.0.1:8000/docs>
 or <http://127.0.0.1:8000/redoc>.
 
-### Serve Angular files by Python
+## Serve Angular files by Python
 
 At first change `outputPath` in `frontend/angular.json` from `"dist/frontend"` to `"../backend/static"`.
 
@@ -162,7 +162,7 @@ def get_file_headers(file_path: Path) -> dict[str, str]:
 
 If `unicorn` still running at <http://127.0.0.1:8000/> you see Angular default page.
 
-### Dockerize it all
+## Dockerize it all
 
 Create `requirements.txt` file for python:
 
@@ -505,3 +505,330 @@ export class AppComponent {
     }
 }
 ```
+
+## Common used elements
+
+Below are recipes for creating commonly used elements.
+
+### Table (client side)
+
+List of records (dictionaries) send to the client at once.
+The client (Angular) can paginate, sort and filter these records.
+In this example it is a list of movies.
+
+#### REST Api endpint
+
+Define `pydantic` model in `movies.py` file.
+
+```python
+from pydantic import BaseModel
+
+class Movie(BaseModel):
+    title: str
+    year: int
+    studio: str
+    director: str
+```
+
+Add in `main.py` imports and endpoint befora `catch_all` definition.
+
+```python
+import json
+from typing import List, Union
+from movies import Movie
+
+...
+
+@app.get("/api/movies", response_model=List[Movie])
+async def get_all_movies():
+    with open("movies.json", "r", encoding="utf-8") as file:
+        movies_data = json.load(file)   
+    return [Movie(**movie) for movie in movies_data]
+```
+
+Now you can open <http://127.0.0.1:8000/docs> and see `/api/movies`
+endpoint. It returns sample data from JSON file.
+
+#### Frontend - generate Angular Material component
+
+Let's generate standard component for movies table.
+I use `-table` suffix to distinguish between various types
+of components related to the same data. The componens path is
+consistent with the API path.
+
+```bash
+$ ng generate @angular/material:table movies/movies-table
+CREATE src/app/movies/movies-table/movies-table-datasource.ts (3665 bytes)
+CREATE src/app/movies/movies-table/movies-table.component.css (37 bytes)
+CREATE src/app/movies/movies-table/movies-table.component.html (882 bytes)
+CREATE src/app/movies/movies-table/movies-table.component.spec.ts (744 bytes)
+CREATE src/app/movies/movies-table/movies-table.component.ts (1138 bytes)
+```
+
+Add this commponent to routing table in `app.routes.ts`.
+
+```typescript
+import { Routes } from '@angular/router';
+import { MoviesTableComponent } from './movies/movies-table/movies-table.component';
+
+export const routes: Routes = [
+    { path: 'movies', component: MoviesTableComponent },
+];
+```
+
+Add link in `app.component.html` to this table.
+
+```html
+<a routerLink="/movies">Movies</a>
+```
+
+And add `RouterModule` in `app.comopnent.ts`.
+
+```typescript
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterModule, RouterOutlet } from '@angular/router';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
+import { ConfigService } from './config/config.service';
+
+export interface Hello {
+    Hello: string;
+}
+@Component({
+    selector: 'app-root',
+    standalone: true,
+    imports: [CommonModule, RouterOutlet, HttpClientModule, RouterModule],
+    templateUrl: './app.component.html',
+    styleUrl: './app.component.css'
+})
+
+...
+```
+
+#### Frontend - service
+
+We need a service which delivers data for component.
+So let's start with default one.
+
+```bash
+$ ng generate service movies/movies
+CREATE src/app/movies/movies.service.spec.ts (357 bytes)
+CREATE src/app/movies/movies.service.ts (135 bytes)
+```
+
+Create interface for delivered data (you can use <https://transform.tools/json-to-typescript>)
+and insert it into generated service.
+
+```typescript
+export interface Movie {
+  title: string
+  year: number
+  studio: string
+  director: string
+}
+```
+
+Add `HttpClient` parameter into constuctor and add mehod `getAll()`.
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+
+
+export interface Movie {
+  title: string
+  year: number
+  studio: string
+  director: string
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class MoviesService {
+
+  constructor(private http: HttpClient) { }
+  
+  getAll(): Observable<Movie[]> {
+    return this.http.get<Movie[]>('/api/movies');
+  }
+  
+}
+```
+
+#### Frontend - couple component with service
+
+Generated table component has its own `DataSource` class
+with sample data in `movies-table-datasource.ts` file.
+It has to be changed to get data from backend (Python).
+
+Replace all `MoviesTableItem` with just `Movie` and import
+this interae from service.
+
+Add service in constructor and use it in `connect()` method.
+
+```typescript
+    constructor(private service: MoviesService) {
+        super();
+    }
+
+    connect(): Observable<Movie[]> {
+        if (this.paginator && this.sort) {
+            return merge(this.service.getAll().pipe(map(data => this.data = data))),
+                this.paginator.page, this.sort.sortChange)
+                .pipe(map(() => {
+                    return this.getPagedData(this.getSortedData([...this.data]));
+                }));
+        } else {
+            throw Error('Please set the paginator and sort on the data source before connecting.');
+        }
+    }
+```
+
+Correct getSortedData method with proper fields.
+
+```typescript
+    private getSortedData(data: Movie[]): Movie[] {
+        if (!this.sort || !this.sort.active || this.sort.direction === '') {
+            return data;
+        }
+
+        return data.sort((a, b) => {
+            const isAsc = this.sort?.direction === 'asc';
+            switch (this.sort?.active) {
+                case 'title': return compare(a.title, b.title, isAsc);
+                case 'year': return compare(+a.year, +b.year, isAsc);
+                case 'studio': return compare(a.studio, b.studio, isAsc);
+                case 'director': return compare(a.director, b.director, isAsc);
+                default: return 0;
+            }
+        });
+```
+
+In `movies-table.component.ts` replace all `MoviesTableItem` with `Movie` as previous.
+Add constructor with injected service and create dataSource object in it.
+Correct `displayedColumns` property,
+
+```typescript
+    ...
+    dataSource!: MoviesTableDataSource;
+
+    constructor(service: MoviesService) {
+        this.dataSource = new MoviesTableDataSource(service);
+    }
+
+    displayedColumns = ['title', 'year', 'studio', 'director'];
+
+    ...
+```
+
+Correct and add columns in `movies-table.component.html`. Each column
+should look like this.
+
+```html
+<ng-container matColumnDef="title">
+    <th mat-header-cell *matHeaderCellDef mat-sort-header>Title</th>
+    <td mat-cell *matCellDef="let row">{{row.title}}</td>
+</ng-container>
+```
+
+Now all works but without filtering.
+
+#### Frontend - filter
+
+In `movies-table-datasource.ts` add properties:
+
+```typescript
+    filter: string = "";
+    filterChange = new EventEmitter<string>();
+```
+
+And add filtering method using filter property where all data
+fields are specified.
+
+```typescript
+    private getFilteredData(data: Movie[]): Movie[] {
+        if (this.filter)
+            return data.filter(movie =>
+                movie.title.toLowerCase().includes(this.filter) ||
+                movie.year.toLowerCase().includes(this.filter) ||
+                movie.studio.toLowerCase().includes(this.filter) ||
+                movie.director.toLowerCase().includes(this.filter)
+            );
+        else
+            return data;
+    }
+```
+
+Modify connect() method to use getFilteredData() and react to the event:
+
+```typescript
+    connect(): Observable<Movie[]> {
+        if (this.paginator && this.sort) {
+            return merge(this.service.getAll().pipe(map(data => this.data = data)),
+                this.paginator.page, this.sort.sortChange, this.filterChange)
+                .pipe(map(() => {
+                    return this.getPagedData(this.getSortedData(this.getFilteredData([...this.data])));
+                }));
+        } else {
+            throw Error('Please set the paginator and sort on the data source before connecting.');
+        }
+    }
+```
+
+In `movies-table.component.html` add at the begginig input box.
+
+```html
+<div class="mat-elevation-z8">
+
+    <mat-form-field>
+        <input matInput (keyup)="applyFilter($event)" placeholder="Filter">
+    </mat-form-field>
+    <table mat-table class="full-width-table" matSort aria-label="Elements">
+    ...
+```
+
+In `movie-table.component.ts` add imports and `applyFilter()` method.
+
+```typescript
+...
+import { MatFormField } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';   
+
+
+@Component({
+    selector: 'app-movies-table',
+    templateUrl: './movies-table.component.html',
+    styleUrl: './movies-table.component.css',
+    standalone: true,
+    imports: [MatTableModule, MatPaginatorModule, MatSortModule, MatFormField, MatInputModule ]
+})
+
+...
+
+    applyFilter(event: Event) {
+        const filterValue = (event.target as HTMLInputElement).value;
+        this.dataSource.filter = filterValue.trim().toLowerCase();
+        this.dataSource.filterChange.emit(filterValue);
+        console.log(this.dataSource.filter);
+        if (this.dataSource.paginator) {
+            this.dataSource.paginator.firstPage();
+        }
+    }
+```
+
+In `movies-table.component.css` add
+
+```css
+.filter {
+    width: 100%;
+    margin-bottom: -22px;
+}
+
+.filter input {
+    width: 100%;
+}
+```
+
+That's all.

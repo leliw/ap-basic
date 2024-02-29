@@ -1,8 +1,10 @@
 """Main file for FastAPI server"""
-from typing import Union
+import json
+from typing import List, Union
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pyaml_env import parse_config
+from movies import Movie
 
 from static_files import static_file_response
 
@@ -23,6 +25,12 @@ async def read_root():
 async def read_item(item_id: int, q: Union[str, None] = None):
     """Return item_id and q"""
     return {"item_id": item_id, "q": q}
+
+@app.get("/api/movies", response_model=List[Movie])
+async def get_all_movies():
+    with open("movies.json", "r", encoding="utf-8") as file:
+        movies_data = json.load(file)   
+    return [Movie(**movie) for movie in movies_data]
 
 # Angular static files - it have to be at the end of file
 @app.get("/{full_path:path}", response_class=HTMLResponse)
