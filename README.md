@@ -516,7 +516,7 @@ List of records (dictionaries) send to the client at once.
 The client (Angular) can paginate, sort and filter these records.
 In this example it is a list of movies.
 
-#### REST Api endpint
+#### REST Api endpoint
 
 Define `pydantic` model in `movies.py` file.
 
@@ -582,7 +582,7 @@ Add link in `app.component.html` to this table.
 <a routerLink="/movies">Movies</a>
 ```
 
-And add `RouterModule` in `app.comopnent.ts`.
+And add `RouterModule` in `app.component.ts`.
 
 ```typescript
 import { Component } from '@angular/core';
@@ -713,10 +713,12 @@ Correct `displayedColumns` property,
 ```typescript
     ...
     dataSource!: MoviesTableDataSource;
+    service: MoviesService;
 
     constructor(service: MoviesService) {
+        this.service = service;
         this.dataSource = new MoviesTableDataSource(service);
-    }
+    }   
 
     displayedColumns = ['title', 'year', 'studio', 'director'];
 
@@ -831,4 +833,261 @@ In `movies-table.component.css` add
 }
 ```
 
-That's all.
+### CRUD - Create, Read, Update, Delete
+
+Let's add basic operations on records from table above.
+
+#### REST API endpoint
+
+First, let's make the `movies` global dictionary.
+
+```python
+with open("movies.json", "r", encoding="utf-8") as file:
+    movies_data = json.load(file)
+movies = {f"{movie['title']}_{movie['year']}": Movie(**movie) for movie in movies_data}
+
+@app.get("/api/movies", response_model=List[Movie])
+async def get_all_movies():
+    return [movie for movie in movies.values()]
+```
+
+Then add post method. The primary key of movies will be
+title and the year. It returns code 201 and `Location`
+response header.
+
+```python
+@app.post("/api/movies", response_model=Movie)
+async def add_movie(movie: Movie):
+    key = f"{movie.title}_{movie.year}"
+    movies[key] = movie.model_dump()
+    location = f"/api/movies/{key}"
+    return Response(status_code=201, headers={"Location": location})
+```
+
+And the rest of methods (GET, PUT, DELETE).
+
+```python
+@app.get("/api/movies/{key}", response_model=Movie)
+async def get_movie(key: str):
+    if key not in movies:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    return movies[key]
+    
+@app.put("/api/movies/{key}")
+async def update_movie(key: str, movie: Movie):
+    if key not in movies:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    movies[key] = movie.model_dump()
+
+@app.delete("/api/movies/{key}")
+async def update_movie(key: str):
+    if key not in movies:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    movies.pop(key)
+```
+
+#### Frontend - service
+
+Frontend service has to changed in similar way.
+
+```typescript
+    private endpoint = '/api/movies'
+
+    getAll(): Observable<Movie[]> {
+        return this.http.get<Movie[]>(this.endpoint);
+    }
+
+    post(movie: Movie): Observable<void> {
+        return this.http.post<void>(this.endpoint, movie);
+    }
+
+    get(key: string): Observable<Movie> {
+        const eKey = encodeURIComponent(key);
+        return this.http.get<Movie>(`${this.endpoint}/${eKey}`);
+    }
+
+    put(key: string, movie: Movie): Observable<void> {
+        const eKey = encodeURIComponent(key);
+        return this.http.put<void>(`${this.endpoint}/${eKey}`, movie);
+    }
+
+    delete(key: string): Observable<void> {
+        const eKey = encodeURIComponent(key);
+        return this.http.delete<void>(`${this.endpoint}/${eKey}`);
+    }
+```
+
+#### Frontend - edit form
+
+Data editing can be done in two ways: a modal window in the
+current page or a separate page. Let's do the second way.
+
+Generate standard component.
+
+```bash
+ng generate component movies/movie-form
+```
+
+Add this commponent to routing table in `app.routes.ts`.
+
+```typescript
+export const routes: Routes = [
+    { path: 'movies', component: MoviesTableComponent },
+    { path: 'movies/:key', component: MovieFormComponent },
+];
+```
+
+Create form with `FormBuilder`,
+
+```typescript
+...
+    form = this.fb.group({
+        title: ['', [Validators.required, Validators.minLength(5)]],
+        year: [0, [Validators.required]],
+        studio: "",
+        director: ['', [Validators.required, Validators.minLength(5)]]
+      });
+    
+
+    constructor(
+        private fb: FormBuilder,
+...
+```
+
+Add video loading based on key in path.
+
+```typescript
+    key!: string;
+    movie!: Movie;
+
+    constructor(
+        private route: ActivatedRoute,
+        private service: MoviesService
+    ) {
+        this.route.params.subscribe(params => {
+            this.key = params['key'];
+            if (this.key && this.key !== '__NEW__')
+                this.service.get(this.key).subscribe(movie => {
+                    this.movie = movie;
+                    this.form.setValue(movie);
+                });
+          });
+    }
+```
+
+Add `onSubmit()` method.
+
+```typescript
+    onSubmit() {
+        if (this.form.invalid) return;
+        const movie = this.form.getRawValue() as Movie;
+        if (this.key === '__NEW__') {
+            this.service.post(movie).subscribe(() => {
+                this.form.reset();
+            });
+        } else {
+            this.service.put(this.key, movie).subscribe(() => {
+                this.form.reset();
+            });
+        }
+    }
+```
+
+And `movie-form.component.ts`
+
+```html
+<form [formGroup]="form" novalidate (ngSubmit)="onSubmit()">
+    <mat-card>
+        <mat-card-header>
+            <mat-card-title>Movie Information</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <div class="row">
+                <div class="col">
+                    <mat-form-field class="full-width">
+                        <input matInput placeholder="Title" formControlName="title">
+                        @if (form.controls['title'].hasError('required')) {
+                        <mat-error>Movie title is <strong>required</strong></mat-error>
+                        }
+                    </mat-form-field>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <mat-form-field class="full-width">
+                        <input matInput maxlength="4" placeholder="Year" formControlName="year" type="number">
+                    </mat-form-field>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <mat-form-field class="full-width">
+                        <input matInput placeholder="Studio" formControlName="studio">
+                    </mat-form-field>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <mat-form-field class="full-width">
+                        <input matInput placeholder="Director" formControlName="director">
+                    </mat-form-field>
+                </div>
+            </div>
+        </mat-card-content>
+        <mat-card-actions>
+            <button mat-raised-button color="primary" type="submit">Submit</button>
+        </mat-card-actions>
+    </mat-card>
+</form>
+```
+
+#### Frontend - couple table with edit form
+
+Add action buttons in `movie-table.component.html`.
+
+```html
+...
+        <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions
+              <button mat-icon-button matTooltip="Click to Edit" class="iconbutton" color="primary" routerLink="/movies/__NEW__">
+                <mat-icon aria-label="Add">add</mat-icon>
+              </button>      
+            </th>
+            <td mat-cell *matCellDef="let row">
+              <button mat-icon-button matTooltip="Click to Edit" class="iconbutton" color="primary" [routerLink]="['/movies', row.title + '_' + row.year]">
+                <mat-icon aria-label="Edit">edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="Click to Delete" class="iconbutton" color="primary" (click)="delete(row)">
+                <mat-icon aria-label="Delete">delete</mat-icon>
+              </button>
+            </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+...
+```
+
+Add 'actions' column and delete method in `movies-table.component.ts`.
+
+```typescript
+...
+    constructor(service: MoviesService) {
+        this.dataSource = new MoviesTableDataSource(service);
+    }
+    
+    displayedColumns = ['title', 'year', 'studio', 'director', 'actions'];
+
+    ngAfterViewInit(): void {
+...
+    delete(movie: Movie) {
+        this.service.delete(movie.title + "_" + movie.year).subscribe(() => {
+            this.dataSource.data = this.dataSource.data.filter(m => m !== movie);
+            this.dataSource.filterChange.emit("");
+        });
+    }
+...
+```
+
+That's all folks.
