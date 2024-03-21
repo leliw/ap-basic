@@ -1,4 +1,5 @@
 """Simple model for a movie"""
+
 from pydantic import BaseModel
 
 
