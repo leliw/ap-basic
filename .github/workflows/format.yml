@@ -28,4 +28,4 @@ jobs:
           run: |
             cd backend
             ruff check .
-            ruff format .
+            ruff format --check .
