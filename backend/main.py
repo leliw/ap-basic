@@ -54,7 +54,7 @@ async def update_movie(key: str, movie: Movie):
     movies[key] = movie.model_dump()
 
 @app.delete("/api/movies/{key}")
-async def update_movie(key: str):
+async def delete_movie(key: str):
     if key not in movies:
         raise HTTPException(status_code=404, detail="Movie not found")
     movies.pop(key)
