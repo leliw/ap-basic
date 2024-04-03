@@ -506,6 +506,134 @@ export class AppComponent {
 }
 ```
 
+## Login via Google
+
+### Install Angular library
+
+<https://www.npmjs.com/package/@abacritt/angularx-social-login>.
+
+```bash
+cd frontend
+npm i @abacritt/angularx-social-login
+```
+
+### Add provider
+
+In code below replace `{clientId}` with real client.
+
+```typescript
+// app.config.ts
+...
+import { GoogleLoginProvider, SocialAuthServiceConfig } from '@abacritt/angularx-social-login';
+
+export const appConfig: ApplicationConfig = {
+    providers: [
+        provideRouter(routes),
+        provideAnimationsAsync(),
+        provideHttpClient(),
+        {
+            provide: 'SocialAuthServiceConfig',
+            useValue: {
+                autoLogin: false,
+                providers: [
+                    {
+                        id: GoogleLoginProvider.PROVIDER_ID,
+                        provider: new GoogleLoginProvider(
+                            '{clientId}'
+                        )
+                    }
+                ],
+                onError: (err: any) => {
+                    console.error(err);
+                }
+            } as SocialAuthServiceConfig,
+        }
+    ]
+};
+```
+
+### Add Google login button
+
+Modify `app.component.ts`.
+
+- add SocialAuthService in constructor
+- read authState in ngOnInit
+- add signOut() method
+
+```typescript
+export class AppComponent implements OnInit {
+
+    version = '';
+    user: SocialUser | null = null;
+    loggedIn: boolean = false;
+
+    constructor(private authService: SocialAuthService, private config: ConfigService) {
+        this.config.getConfig().subscribe(c => {
+            this.version = c.version;
+        })
+    }
+
+    ngOnInit() {
+        this.authService.authState.subscribe((user) => {
+            this.user = user;
+            this.loggedIn = (user != null);
+        });
+    }
+
+    signOut(): void {
+        this.authService.signOut();
+        this.user = null;
+        this.loggedIn = false;
+    }
+
+} 
+```
+
+Modify `app.component.html`.
+
+- add toolbar with user photo and logout button in header
+- add login button in main section
+
+```html
+<header>
+    <mat-toolbar color="primary">
+        <h1>Chat demo</h1>
+        @if(user != null){
+        <div class="flex-spacer"></div>
+        <img src="{{ user.photoUrl }}" class="profile-photo" referrerpolicy="no-referrer">
+        <button mat-icon-button aria-label="Logout" (click)="signOut()">
+            <mat-icon aria-hidden="false" aria-label="Logout">logout</mat-icon>
+        </button>
+        }
+    </mat-toolbar>
+</header>
+<main [class.login]="!loggedIn">
+    @if(loggedIn){<app-chat></app-chat>}
+    @else{
+    <asl-google-signin-button type='standard' size='large'></asl-google-signin-button>
+    }
+</main>
+...
+```
+
+Modify `app.component.css`.
+
+```css
+...
+.profile-photo {
+    border-radius: 50%;
+    width: calc(var(--mat-toolbar-standard-height) * 0.8);
+    height: calc(var(--mat-toolbar-standard-height) * 0.8);
+    border: 2px solid white;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+main.login {
+    display: grid;
+    place-items: center;
+}
+```
+
 ## Common used elements
 
 Below are recipes for creating commonly used elements.
