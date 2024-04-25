@@ -2,6 +2,8 @@
 
 It's a simple full stack project with Angular frontend and Python backend.
 
+[Live demo](https://ap-basic-fnobcck2ma-ew.a.run.app/movies)
+
 ## Create directory and standard projects
 
 Create parent folder for both projects.
@@ -83,35 +85,20 @@ or <http://127.0.0.1:8000/redoc>.
 
 ## Serve Angular files by Python
 
-At first change `outputPath` in `frontend/angular.json` from `"dist/frontend"` to `"../backend/static"`.
-
-```json
-{
-  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
-  "version": 1,
-  "newProjectRoot": "projects",
-  "projects": {
-    "frontend": {
-      "projectType": "application",
-      "schematics": {},
-      "root": "",
-      "sourceRoot": "src",
-      "prefix": "app",
-      "architect": {
-        "build": {
-          "builder": "@angular-devkit/build-angular:application",
-          "options": {
-            "outputPath": "../backend/static",
-```
-
-Now you can compile Angular part.
+You can compile Angular part you can build with command:
 
 ```bash
 cd frontend
 ng build
 ```
 
-Compiled files will be written in `backend/static/browser`.
+Compiled files will be written in `frontend/dist/frontend`.
+Let's copy them to `backend/static`.
+
+```bash
+cp -r frontend/dist/frontend/* backend/static/
+```
+
 Set python to serve these files - modify `main.py`.
 
 ```python
@@ -128,6 +115,8 @@ It adds proper `Content-Type` header and returns main `index.html`
 if URL path does'n exists.
 
 ```python
+"""This module provides a function to return static files or index.html from a base directory."""
+
 import os
 from pathlib import Path
 
@@ -139,11 +128,35 @@ def static_file_response(base_dir: str, uri_path: str) -> HTMLResponse:
     """Return a static files (if exists) or index.html (if exists) from the base_dir"""
     file_path = Path(base_dir) / uri_path
     if file_path.exists() and file_path.is_file():
-        return HTMLResponse(content=file_path.read_text(), status_code=200, headers=get_file_headers(file_path))
-    index_path = Path(base_dir) / 'index.html'
+        return HTMLResponse(
+            content=get_file_content(file_path),
+            status_code=200,
+            headers=get_file_headers(file_path),
+        )
+    index_path = Path(base_dir) / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="Page not found")
     return HTMLResponse(content=index_path.read_text(), status_code=200)
+
+
+def get_file_content(file_path: Path):
+    """Return the file content"""
+    file_extension = os.path.splitext(file_path)[1]
+    if file_extension in [
+        ".js",
+        ".css",
+        ".html",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".csv",
+        ".txt",
+    ]:
+        return file_path.read_text()
+    else:
+        return file_path.read_bytes()
+
 
 def get_file_headers(file_path: Path) -> dict[str, str]:
     """Return the file headers (Content-Type) based on the file extension"""
@@ -155,6 +168,14 @@ def get_file_headers(file_path: Path) -> dict[str, str]:
             media_type = "text/css"
         case ".ico":
             media_type = "image/x-icon"
+        case ".png":
+            media_type = "image/png"
+        case ".jpg":
+            media_type = "image/jpeg"
+        case ".jpeg":
+            media_type = "image/jpeg"
+        case ".svg":
+            media_type = "image/svg+xml"
         case _:
             media_type = "text/html"
     return {"Content-Type": media_type}
@@ -172,29 +193,45 @@ pip freeze > requirements.txt
 cd ..
 ```
 
-Create `Dockerfile`.
+Create multistaging `Dockerfile` where in first stage is Angular project built
+and the ditribution files is copied to Python project and then the final image
+is built.
 
 ```Dockerfile
-FROM python:3.11.7-slim
-EXPOSE 8000
-# Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-# Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
-RUN python -m pip install --upgrade pip
-# Install pip requirements
-COPY backend/requirements.txt .
-RUN python -m pip install -r requirements.txt
+# ------ Stage 1: Angular project ------
+    FROM node:20 AS angular-build
+    WORKDIR /app
 
-WORKDIR /app
-COPY ./backend/ /app
-
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "-k", "uvicorn.workers.UvicornWorker", "main:app"]
+    COPY frontend/package.json frontend/package-lock.json ./
+    RUN npm install
+    
+    COPY frontend/ .
+    RUN npm run build
+    
+# ------ Stage 2: Python/FastAPI project ------
+    FROM python:3.11.7-slim
+    WORKDIR /app
+    
+    # Keeps Python from generating .pyc files in the container
+    ENV PYTHONDONTWRITEBYTECODE=1
+    # Turns off buffering for easier container logging
+    ENV PYTHONUNBUFFERED=1
+    RUN python -m pip install --upgrade pip
+    # Install pip requirements
+    COPY backend/requirements.txt .
+    RUN python -m pip install -r requirements.txt
+    
+    COPY ./backend/ /app
+    # Copy Angular build to FastAPI static folder
+    COPY --from=angular-build /app/dist/frontend /app/static
+    
+    # Creates a non-root user with an explicit UID and adds permission to access the /app folder
+    # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
+    RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
+    USER appuser
+    # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
+    EXPOSE 8080
+    CMD ["gunicorn", "--bind", "0.0.0.0:8080", "-k", "uvicorn.workers.UvicornWorker", "main:app"]
 ```
 
 And standard `.dockerignore` file.
@@ -238,10 +275,10 @@ docker build -t leliw/ap-basic .
 Then run built image.
 
 ```bash
-docker run -p 8088:8000 leliw/ap-basic
+docker run -p 8080:8080 leliw/ap-basic
 ```
 
-Go <http://localhost:8088/>.
+Go <http://localhost:8080/>.
 
 ### Build docker image with Github Action
 
