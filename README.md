@@ -2,7 +2,7 @@
 
 It's a simple full stack project with Angular frontend and Python backend.
 
-[Live demo](https://ap-basic-fnobcck2ma-ew.a.run.app/movies)
+[Live demo](https://ap-basic-fnobcck2ma-ew.a.run.app/)
 
 ## Create directory and standard projects
 
